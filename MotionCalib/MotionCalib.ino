@@ -83,7 +83,7 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
   // Go forward one square
-  /*digitalWrite(DIR_PINL, 1);
+  digitalWrite(DIR_PINL, 1);
   digitalWrite(STEP_PINL, LOW);
   digitalWrite(DIR_PINR, 1);
   digitalWrite(STEP_PINR, LOW);
@@ -143,5 +143,5 @@ void loop() {
     digitalWrite(STEP_PINR, LOW);
     delay(2);
   }
-  delay(1000);*/
+  delay(1000);  
 }
