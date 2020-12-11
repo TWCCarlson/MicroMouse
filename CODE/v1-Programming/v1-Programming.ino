@@ -101,6 +101,19 @@ void setup() {
 
 void loop() {
   // put your main code here, to run repeatedly:
+  int randomDir;
+  randomDir = random(0,2);
+  int randomTurns;
+  randomTurns = random(0,8);
+  randomTurns = randomTurns % 4;
+  Serial.print("Turn Direction: ");
+  Serial.println(randomDir);
+  Serial.print("Number of 90 deg rotations: ");
+  Serial.println(randomTurns);
+  Fwd_Unknown();
+  delay(1000);
+  Rot(randomDir,randomTurns);
+  delay(1000);
 }
 
 
@@ -235,6 +248,21 @@ int DetectWallToRT() {
     WallExistsRT = 1;
   }
   return WallExistsRT;
+}
+
+int DetectWallFWD() {
+  int WallExistsFWD;
+  // Check if there is a wall in front
+  GetVoltageFWD();
+  VoltageToDistFWD();
+  if (distR >= 9) {
+    // Then there is no wall
+    WallExistsFWD = 0;
+  } else {
+    // Then there is a wall
+    WallExistsFWD = 1;
+  }
+  return WallExistsFWD;
 }
 
 // ===========================
@@ -646,23 +674,23 @@ void Fwd_NoWall(int Steps) {
 void Fwd_Unknown() {
   int StepsTaken;
   int StepsRemaining;
-  int WallArray[2];
+  int WallArray[3];
   // The condition where the mouse does not know what walls it can use to guide itself as it moves forward
   // Start by moving forward and checking for the wall condition ahead
   StepsTaken = Scout(WallArray);
   StepsRemaining = STEPS_STRT - StepsTaken;
   // Once the walls are identified, return to guided movement functions
-  if (WallArray[0] == 1 && WallArray[1] == 1) {
+  if (WallArray[0] == 1 && WallArray[2] == 1) {
     // Walls on both sides
     // Move forward with 2 points of guidance
     Serial.println("2 Walls available");
     Fwd_2Walls(StepsRemaining);
-  } else if (WallArray[0] == 1 && WallArray[1] == 0) {
+  } else if (WallArray[0] == 1 && WallArray[2] == 0) {
     // Wall on left side only
     // Move forward with left point of guidance
     Serial.println("Left wall only");
     Fwd_LWall(StepsRemaining);
-  } else if (WallArray[0] == 0 && WallArray[1] == 1) {
+  } else if (WallArray[0] == 0 && WallArray[2] == 1) {
     // Wall on right side only
     // Move forward with right point of guidance
     Serial.println("Right wall only");
@@ -675,7 +703,7 @@ void Fwd_Unknown() {
   }
 }
 
-int Scout(int (& WallArray)[2]) {
+int Scout(int (& WallArray)[3]) {
   int StepsTaken;
   // Move Forward some steps, and check for wall presence
   digitalWrite(MS1L, HIGH);
@@ -696,7 +724,7 @@ int Scout(int (& WallArray)[2]) {
   // Left wall
   WallArray[0] = DetectWallToLT();
   // Right wall
-  WallArray[1] = DetectWallToRT();
+  WallArray[2] = DetectWallToRT();
   StepsTaken = SCOUT_STEPS;
   return StepsTaken;
 }
