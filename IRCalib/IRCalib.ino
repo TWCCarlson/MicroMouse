@@ -23,6 +23,9 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
   //Read the button state
+  volts = analogRead(Sen);
+  volts = volts*3.3/1024;
+  Serial.println(volts);
   voltavg = 0;
   buttonState = digitalRead(buttonPin);
   /*Print the button state
@@ -56,7 +59,7 @@ void loop() {
   }*/
 
   //Using mode
-  float number = array[0];
+  /*float number = array[0];
   float Mode = number;
   int count = 1;
   int countMode = 1;

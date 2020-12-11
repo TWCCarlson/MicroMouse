@@ -13,12 +13,14 @@
 #define SenR A2 // Profile ii
 #define SenC A3 // Profile i
 
-int stepsStrt = 424;
-// 424 steps = 1 cell
-int stepsSpin = 171;
-// 342 steps = 360 deg
-// 171 steps = 180 deg
+int stepsStrt = 420;
+// 420 steps = 1 cell
+int stepsSpin = 172;
+// 344 steps = 180 deg
+// 172 steps = 90 deg
 // 86 steps = 45 deg
+
+#include <ArduinoSort.h>
 
 void setup() {
   //Setup
@@ -32,27 +34,11 @@ void setup() {
   pinMode(STEP_PINR, OUTPUT);
   Serial.begin(9600);
   delay(5000);
-  Fwd(2,1);
-  Rot(1,1);
-  Rot(2,0);
-  Fwd(2,0);
-  Rot(8,0);
-  Fwd(3,1);
-  Rot(1,0);
-  Fwd(2,1);
-  Rot(1,0);
-  Fwd(2,1);
-  Rot(1,1);
-  Fwd(1,1);
-  Rot(1,1);
-  Fwd(1,1);
-  Rot(1,1);
-  Fwd(1,1);
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
-  
+  Fwd(3,1);
 }
 
 void Fwd(int Cells, bool Dir){
@@ -67,16 +53,14 @@ void Fwd(int Cells, bool Dir){
     digitalWrite(DIR_PINR, LOW);
   }
   for (int i = 1; i <= stepsStrt*Cells; i++){
-    digitalWrite(STEP_PINL, HIGH);
     digitalWrite(STEP_PINR, HIGH);
+    digitalWrite(STEP_PINL, HIGH);
     delay(2);
-    digitalWrite(STEP_PINL, LOW);
     digitalWrite(STEP_PINR, LOW);
+    digitalWrite(STEP_PINL, LOW);
     delay(2);
   }
-  //delay(500);
-  Serial.println("Cells moved: ");
-  Serial.println(Cells);
+  delay(200);
 }
 
 void Rot(int Rotations, bool Dir){
@@ -98,5 +82,5 @@ void Rot(int Rotations, bool Dir){
     digitalWrite(STEP_PINR, LOW);
     delay(2);
   }
-  //delay(1000);
+  delay(200);
 }
