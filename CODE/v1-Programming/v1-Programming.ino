@@ -97,6 +97,7 @@ void setup() {
 
   // ==== CODE TEST ===========
   delay(5000);
+  int cells = 0;
 }
 
 void loop() {
@@ -104,16 +105,17 @@ void loop() {
   int randomDir;
   randomDir = random(0,2);
   int randomTurns;
-  randomTurns = random(0,8);
+  randomTurns = random(1,8);
   randomTurns = randomTurns % 4;
   Serial.print("Turn Direction: ");
   Serial.println(randomDir);
   Serial.print("Number of 90 deg rotations: ");
   Serial.println(randomTurns);
   Fwd_Unknown();
-  delay(1000);
+  //if (cells % 5 == 1) {
+    Recenter();
+  //}
   Rot(randomDir,randomTurns);
-  delay(1000);
 }
 
 
@@ -255,7 +257,7 @@ int DetectWallFWD() {
   // Check if there is a wall in front
   GetVoltageFWD();
   VoltageToDistFWD();
-  if (distR >= 9) {
+  if (distC >= 9) {
     // Then there is no wall
     WallExistsFWD = 0;
   } else {
@@ -283,6 +285,12 @@ void SetDirFWD() {
   // Set direction pins for forward movement
   digitalWrite(DIR_PINL, HIGH);
   digitalWrite(DIR_PINR, HIGH);
+}
+
+void SetDirBWD() {
+  // Set direction pins for backward movement
+  digitalWrite(DIR_PINL, LOW);
+  digitalWrite(DIR_PINR, LOW);
 }
 
 void SetDirCW() {
@@ -748,11 +756,249 @@ void Rot(bool Dir, int N) {
   }
 }
 
-// Scouting
-// Forward
-//    2 walls
-//    L wall
-//    R wall
-//    0 wall
-//    Unknown wall
-// Rotation
+void Recenter() {
+  // Using two perpendicular walls, center the robot
+  // Check which walls are present
+  int WallArray[3];
+  WallArray[0] = DetectWallToLT();
+  WallArray[1] = DetectWallFWD();
+  WallArray[2] = DetectWallToRT();
+  if (WallArray[0] == 1 && WallArray[1] == 1) {
+    // Recenter using the left and forward wall
+    // Start with the forward wall
+    if (distC > FWD_PADDING) {
+      // Too far from the wall
+      while (distC > FWD_PADDING) {
+        GetVoltageFWD();
+        VoltageToDistFWD();
+        SetDirFWD();
+        digitalWrite(MS1L, HIGH);
+        digitalWrite(MS2L, HIGH);
+        digitalWrite(MS1R, HIGH);
+        digitalWrite(MS2R, HIGH);
+        Step();
+      }
+    } else if (distC < FWD_PADDING) {
+      // Too close to the wall
+      while (distC < FWD_PADDING) {
+        GetVoltageFWD();
+        VoltageToDistFWD();
+        SetDirBWD();
+        digitalWrite(MS1L, HIGH);
+        digitalWrite(MS2L, HIGH);
+        digitalWrite(MS1R, HIGH);
+        digitalWrite(MS2R, HIGH);
+        Step();
+      }
+    }
+    // Rotate to face the left wall
+    delay(50);
+    Rot(0,1);
+    delay(50);
+    // Using forward sensor again
+    GetVoltageFWD();
+    VoltageToDistFWD();
+    if (distC > FWD_PADDING-0.5) {
+      // Too far from the wall
+      while (distC > FWD_PADDING-0.5) {
+        GetVoltageFWD();
+        VoltageToDistFWD();
+        SetDirFWD();
+        digitalWrite(MS1L, HIGH);
+        digitalWrite(MS2L, HIGH);
+        digitalWrite(MS1R, HIGH);
+        digitalWrite(MS2R, HIGH);
+        Step();
+      }
+    } else if (distC < FWD_PADDING-0.5) {
+      // Too close to the wall
+      while (distC < FWD_PADDING-0.5) {
+        GetVoltageFWD();
+        VoltageToDistFWD();
+        SetDirBWD();
+        digitalWrite(MS1L, HIGH);
+        digitalWrite(MS2L, HIGH);
+        digitalWrite(MS1R, HIGH);
+        digitalWrite(MS2R, HIGH);
+        Step();
+      }
+    }
+    // Rotate to face the front wall
+    delay(50);
+    Rot(1,1);
+    delay(50);
+    // Recenter one more time
+    GetVoltageFWD();
+    VoltageToDistFWD();
+    if (distC > FWD_PADDING) {
+      // Too far from the wall
+      while (distC > FWD_PADDING) {
+        GetVoltageFWD();
+        VoltageToDistFWD();
+        SetDirFWD();
+        digitalWrite(MS1L, HIGH);
+        digitalWrite(MS2L, HIGH);
+        digitalWrite(MS1R, HIGH);
+        digitalWrite(MS2R, HIGH);
+        Step();
+      }
+    } else if (distC < FWD_PADDING) {
+      // Too close to the wall
+      while (distC < FWD_PADDING) {
+        GetVoltageFWD();
+        VoltageToDistFWD();
+        SetDirBWD();
+        digitalWrite(MS1L, HIGH);
+        digitalWrite(MS2L, HIGH);
+        digitalWrite(MS1R, HIGH);
+        digitalWrite(MS2R, HIGH);
+        Step();
+      }
+    }
+  } else if (WallArray[2] == 1 && WallArray[1] == 1) {
+    // Recenter using the right and forward wall
+    // Start with the forward wall
+    if (distC > FWD_PADDING) {
+      // Too far from the wall
+      while (distC > FWD_PADDING) {
+        GetVoltageFWD();
+        VoltageToDistFWD();
+        SetDirFWD();
+        digitalWrite(MS1L, HIGH);
+        digitalWrite(MS2L, HIGH);
+        digitalWrite(MS1R, HIGH);
+        digitalWrite(MS2R, HIGH);
+        Step();
+      }
+    } else if (distC < FWD_PADDING) {
+      // Too close to the wall
+      while (distC < FWD_PADDING) {
+        GetVoltageFWD();
+        VoltageToDistFWD();
+        SetDirBWD();
+        digitalWrite(MS1L, HIGH);
+        digitalWrite(MS2L, HIGH);
+        digitalWrite(MS1R, HIGH);
+        digitalWrite(MS2R, HIGH);
+        Step();
+      }
+    }
+    // Rotate to face the right wall
+    delay(50);
+    Rot(1,1);
+    delay(50);
+    // Using forward sensor again
+    GetVoltageFWD();
+    VoltageToDistFWD();
+    if (distC > FWD_PADDING-0.5) {
+      // Too far from the wall
+      while (distC > FWD_PADDING-0.5) {
+        GetVoltageFWD();
+        VoltageToDistFWD();
+        SetDirFWD();
+        digitalWrite(MS1L, HIGH);
+        digitalWrite(MS2L, HIGH);
+        digitalWrite(MS1R, HIGH);
+        digitalWrite(MS2R, HIGH);
+        Step();
+      }
+    } else if (distC < FWD_PADDING-0.5) {
+      // Too close to the wall
+      while (distC < FWD_PADDING-0.5) {
+        GetVoltageFWD();
+        VoltageToDistFWD();
+        SetDirBWD();
+        digitalWrite(MS1L, HIGH);
+        digitalWrite(MS2L, HIGH);
+        digitalWrite(MS1R, HIGH);
+        digitalWrite(MS2R, HIGH);
+        Step();
+      }
+    }
+    // Rotate to face the front wall
+    delay(50);
+    Rot(0,1);
+    delay(50);
+    // Recenter one more time
+    GetVoltageFWD();
+    VoltageToDistFWD();
+    if (distC > FWD_PADDING) {
+      // Too far from the wall
+      while (distC > FWD_PADDING) {
+        GetVoltageFWD();
+        VoltageToDistFWD();
+        SetDirFWD();
+        digitalWrite(MS1L, HIGH);
+        digitalWrite(MS2L, HIGH);
+        digitalWrite(MS1R, HIGH);
+        digitalWrite(MS2R, HIGH);
+        Step();
+      }
+    } else if (distC < FWD_PADDING) {
+      // Too close to the wall
+      while (distC < FWD_PADDING) {
+        GetVoltageFWD();
+        VoltageToDistFWD();
+        SetDirBWD();
+        digitalWrite(MS1L, HIGH);
+        digitalWrite(MS2L, HIGH);
+        digitalWrite(MS1R, HIGH);
+        digitalWrite(MS2R, HIGH);
+        Step();
+      }
+    }
+  } /*else if (WallArray[1] == 1) {
+    // Only the forward wall
+    if (distC > FWD_PADDING) {
+      // Too far from the wall
+      while (distC > FWD_PADDING) {
+        GetVoltageFWD();
+        VoltageToDistFWD();
+        SetDirFWD();
+        digitalWrite(MS1L, HIGH);
+        digitalWrite(MS2L, HIGH);
+        digitalWrite(MS1R, HIGH);
+        digitalWrite(MS2R, HIGH);
+        Step();
+      }
+    } else if (distC < FWD_PADDING) {
+      // Too close to the wall
+      while (distC < FWD_PADDING) {
+        GetVoltageFWD();
+        VoltageToDistFWD();
+        SetDirBWD();
+        digitalWrite(MS1L, HIGH);
+        digitalWrite(MS2L, HIGH);
+        digitalWrite(MS1R, HIGH);
+        digitalWrite(MS2R, HIGH);
+        Step();
+      }
+    }
+    // Repeat, no other wall
+    if (distC > FWD_PADDING) {
+      // Too far from the wall
+      while (distC > FWD_PADDING) {
+        GetVoltageFWD();
+        VoltageToDistFWD();
+        SetDirFWD();
+        digitalWrite(MS1L, HIGH);
+        digitalWrite(MS2L, HIGH);
+        digitalWrite(MS1R, HIGH);
+        digitalWrite(MS2R, HIGH);
+        Step();
+      }
+    } else if (distC < FWD_PADDING) {
+      // Too close to the wall
+      while (distC < FWD_PADDING) {
+        GetVoltageFWD();
+        VoltageToDistFWD();
+        SetDirBWD();
+        digitalWrite(MS1L, HIGH);
+        digitalWrite(MS2L, HIGH);
+        digitalWrite(MS1R, HIGH);
+        digitalWrite(MS2R, HIGH);
+        Step();
+      }
+    }
+  }*/
+}
