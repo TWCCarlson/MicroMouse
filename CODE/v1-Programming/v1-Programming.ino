@@ -37,7 +37,7 @@ float diff;
 //RIGHT STEPPER
 #define STEP_PINR 33
 #define DIR_PINR 15
-#define MS1R A1
+#define MS1R 21
 #define MS2R 27
 
 // IR SENSORS
@@ -50,13 +50,14 @@ float diff;
 
 // ===== GLOBAL CONSTANTS ========
 float FWD_PADDING = 2.5;    // cm, stopping distance between forward sensor and wall
-float RT_PADDING = 3.2;   // cm, stopping distance between right sensor and wall
-float LT_PADDING = 3.2;   // cm, stopping distance between left sensor and wall
+float RT_PADDING = 3.5;   // cm, stopping distance between right sensor and wall
+float LT_PADDING = 3.5;   // cm, stopping distance between left sensor and wall
 float FWD_DRIFT_TOLERANCE = 0.3;    // cm, acceptable deviation from lane center during forward travel
 float FWD_CENTER_DIST = 3.7;        // cm, distance between each wall and sensor during forward travel
 int SCOUT_STEPS = 200;              // steps, empirically determined distance for checking next square walls
 int STEPS_STRT = 420;               // steps, empirically determined distance for moving 1 cell center-to-center
 int STEPS_SPIN = 172;               // steps, empirically determined distance for rotating 90 degrees in place
+int RecursionLimit = 0;
 // Because the analog -> voltage readings are much less noisy than analog -> voltage -> distance readings, we prefer to set the padding around the voltage
 // This also means that the accuracy interval is better. Estimate ~1.5cm-7.5cm to be "accurate" for curve generation, and 2cm-5cm to be "accurate" for in-maze use
 // Distance -> Voltage equations are taken from Sen1.xlsx, Sen2.xlsx, Sen3.xlsx results of sensor calibration
@@ -69,7 +70,17 @@ float LT_VOLT_PADDING = 0.001135*pow(LT_PADDING, 4)-0.027837*pow(LT_PADDING, 3)+
 // ===== END GLOBAL CONSTANTS ===
 
 
-// ===== CONTROL VARIABLES ======
+
+// ===== NETWORKING SETUP =======
+#include <WiFi.h>
+#include <WebServer.h>
+const char ssid[] = "laurinet";
+const char pass[] = "1onegem99";
+int status = WL_IDLE_STATUS;
+WebServer server(80);
+#define LEDpin 13
+// ===== END NETWORKING =========
+
 
 
 void setup() {
@@ -85,7 +96,7 @@ void setup() {
   pinMode(DIR_PINR, OUTPUT);
   pinMode(STEP_PINR, OUTPUT);
   
-  // ==== INITIAL SETTINGS ====
+  // ==== INITIAL SETTINGS =====
   // Mouse operation is much smoother using half-steps, so they should be the default:
   digitalWrite(MS1L, HIGH);
   digitalWrite(MS1R, HIGH);
@@ -95,6 +106,28 @@ void setup() {
   // ==== DEBUG OPTIONS =======
   Serial.begin(9600);
 
+  // ==== WEBSERVER START =====
+  connectToNetwork();
+  writeNetworkInfo();
+  serverStart();
+
+  // ==== SERVER HANDLES ======
+  // Receive Initialization requests
+  server.on("/Init", handle_Init);
+  // Receive CW Rotation requests
+  server.on("/CWRot", handle_CWRot);
+  // Receive CCW Rotation requests
+  server.on("/CCWRot", handle_CCWRot);
+  // Receive FWD Explore requests
+  server.on("/FWDunk", handle_FWDunk);
+  // Receive WallRead requests
+  server.on("/WallRead", handle_WallRead);
+  // Receiver Recenter reuqests
+  server.on("/Recenter", handle_Recenter);
+  
+  // Other urls are not valid, return an error
+  server.onNotFound(handle_NotFound);
+  
   // ==== CODE TEST ===========
   delay(5000);
   int cells = 0;
@@ -102,10 +135,11 @@ void setup() {
 
 void loop() {
   // put your main code here, to run repeatedly:
-  int randomDir;
+  server.handleClient();
+  /*int randomDir;
   randomDir = random(0,2);
   int randomTurns;
-  randomTurns = random(1,8);
+  randomTurns = random(1,4);
   randomTurns = randomTurns % 4;
   Serial.print("Turn Direction: ");
   Serial.println(randomDir);
@@ -113,13 +147,97 @@ void loop() {
   Serial.println(randomTurns);
   Fwd_Unknown();
   //if (cells % 5 == 1) {
-    Recenter();
+  //  Recenter();
   //}
-  Rot(randomDir,randomTurns);
+  Rot(randomDir,randomTurns);*/
+  
+  /*Fwd_Unknown();
+  Fwd_Unknown();
+  Rot(1,2);
+  Fwd_Unknown();
+  Fwd_Unknown();
+  Rot(0,2);*/
+  //delay(1000);
+  //Fwd_Unknown();
 }
 
+// ============================
+// ===== SERVER FUNCTIONS =====
+// ============================
 
+void connectToNetwork() {
+  // Connects the ESP32 to LAN
+  WiFi.begin(ssid, pass);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Establishing connection to WiFi..");
+  }
+  Serial.println("Connected to network");
+}
 
+void writeNetworkInfo() {
+  // Writes device IP, MAC address into serial
+  Serial.println(WiFi.localIP());
+  Serial.println(WiFi.macAddress());
+}
+
+void serverStart() {
+  // Starts the HTTP server
+  server.begin();
+  Serial.println("HTTP Server started...");
+}
+
+void handle_Init() {
+  for (int i = 0; i < 5; i++){
+    digitalWrite(LEDpin, HIGH);
+    delay(250);
+    digitalWrite(LEDpin, LOW);
+    delay(250);
+  }
+  Serial.println("READY: CONFIRM LED FLASH");
+  server.send(200, "text/html", "INITIALIZED");
+}
+
+void handle_CWRot() {
+  Rot(1,1);
+  Serial.println("ROTATED 90 CW");
+  server.send(200, "text/plain", "ROTATED 90 CW");
+}
+
+void handle_CCWRot() {
+  Rot(0,1);
+  Serial.println("Rotated 90 CCW");
+  server.send(200, "text/plain", "ROTATED 90 CCW");
+}
+
+void handle_FWDunk() {
+  Fwd_Unknown();
+  Serial.println("MOVED FWD 1 CELL");
+  server.send(200, "text/plain", "MOVED FWD 1 CELL");
+}
+
+void handle_WallRead() {
+  int WallArray[3];
+  String Response = "";
+  WallArray[0] = DetectWallToLT();
+  WallArray[1] = DetectWallFWD();
+  WallArray[2] = DetectWallToRT();
+  for (int i = 0; i < 3; i++) {
+    Serial.print(WallArray[i]);
+    Serial.println("");
+    Response = Response + String(WallArray[i]);
+  }
+  server.send(200, "text/plain", Response);
+}
+
+void handle_Recenter() {
+  Recenter();
+  server.send(200, "text/plain", "RECENTERED");
+}
+
+void handle_NotFound() {
+  server.send(404, "text/plain", "NOT FOUND");
+}
 
 // ============================
 // ===== SENSOR FUNCTIONS =====
@@ -322,8 +440,14 @@ void Fwd_2Walls(int Steps) {
     // A positive difference indicates being closer to the right
     // A negative difference indicates being closer to the left
     diff = distL - distR;
+    /*Serial.print(distL);
+    Serial.print(", ");
+    Serial.print(distR);
+    Serial.print(", ");
+    Serial.println(diff);*/
     // Issue corrections by changing microstepping
     if (diff > FWD_DRIFT_TOLERANCE) {
+      //Serial.println("TURNING LEFT");
       // Microstep the left wheel for a little while
       digitalWrite(MS1L, HIGH);
       digitalWrite(MS2L, HIGH);
@@ -333,6 +457,7 @@ void Fwd_2Walls(int Steps) {
       // Track number of microsteps
       LMicros++;
     } else if (diff < -FWD_DRIFT_TOLERANCE) {
+      //Serial.println("TURNING RIGHT");
       // Microstep the right wheel for a little while
       digitalWrite(MS1R, HIGH);
       digitalWrite(MS2R, HIGH);
@@ -365,6 +490,8 @@ void Fwd_2Walls(int Steps) {
   if (RMicros > LMicros) {
     // Microstepped the right wheel more, so we may be turned right
     for (int j = 0; j < (RMicros-LMicros)/2; j++) {
+      //Serial.println("Turning left");
+      Serial.println((RMicros-LMicros)/2);
       // Want to perform a CCW turn
       SetDirCCW();
       // Microstep the left wheel
@@ -378,6 +505,8 @@ void Fwd_2Walls(int Steps) {
   } else if (RMicros < LMicros) {
     // Microstepped the left wheel more, so we may be turned left
     for (int j = 0; j < (LMicros-RMicros)/2; j++) {
+      //Serial.println("Turning right");
+      Serial.println((LMicros-RMicros)/2);
       // Want to perform a CW turn
       SetDirCW();
       // Microstep the right wheel
@@ -389,15 +518,18 @@ void Fwd_2Walls(int Steps) {
       Step();
     }
   }
+  delay(50);
   // Distance loss correction
   // Use recursive calling to drive the error to zero while checking angular heading and linear position
   if  (LMicros + RMicros > 100) {
-    Steps = (LMicros + RMicros)*0.5;
+    //Serial.println("Largest correction");
+    Steps = (LMicros + RMicros)*0.4;
     delay(50);
     //Serial.print("Linear correction steps: ");
     //Serial.println(Steps);
     Fwd_2Walls(Steps);
   } else if (LMicros + RMicros > 50) {
+    //Serial.println("Medium correction");
     // An empirically determined fraction of the microsteps taken
     Steps = (LMicros + RMicros)*0.8;
     // Debug
@@ -406,6 +538,7 @@ void Fwd_2Walls(int Steps) {
     //Serial.println(Steps);
     Fwd_2Walls(Steps);
   } else if (LMicros + RMicros > 30) {
+    //Serial.println("Small correction");
     // An empirically determined fraction of the microsteps taken
     Steps = (LMicros + RMicros)*0.9;
     // Debug
@@ -413,17 +546,17 @@ void Fwd_2Walls(int Steps) {
     //Serial.print("Linear correction steps: ");
     //Serial.println(Steps);
     Fwd_2Walls(Steps);
-  } else if (LMicros + RMicros > 10) {
+  } else if (LMicros + RMicros > 10 && RecursionLimit == false) {
+    //Serial.println("Smallest correction");
     // An empirically determined fraction of the microsteps taken
     Steps = (LMicros + RMicros)*1;
     // Debug
     delay(50);
     //Serial.print("Linear correction steps: ");
     //Serial.println(Steps);
+    RecursionLimit = 1;
     Fwd_2Walls(Steps);
   }
-  // For very large angle differences the recursion can cause excessive total forward distance travel
-  // Need to fix this
 }
 
 void Fwd_LWall(int Steps) {
@@ -437,6 +570,11 @@ void Fwd_LWall(int Steps) {
     GetVoltageLT();
     // Convert voltages to distances
     VoltageToDistLT();
+    /*Serial.print(distL);
+    Serial.print(", ");
+    Serial.print(distR);
+    Serial.print(", ");
+    Serial.println(diff);*/
     // With only a left wall we rely on the distance from the wall for centering
     // A positive distance indicates being too far from the left wall
     // A negative distance indicates being too close to the left wall
@@ -482,7 +620,7 @@ void Fwd_LWall(int Steps) {
   // Try to correct direction if not parallel to cell
   if (RMicros > LMicros) {
     // Microstepped the right wheel more, so we may be turned right
-    for (int j = 0; j < (RMicros-LMicros)/2; j++) {
+    for (int j = 0; j < (RMicros-LMicros)/2.5; j++) {
       // Want to perform a CCW turn
       SetDirCCW();
       // Microstep the left wheel
@@ -495,7 +633,7 @@ void Fwd_LWall(int Steps) {
     }
   } else if (RMicros < LMicros) {
     // Microstepped the left wheel more, so we may be turned left
-    for (int j = 0; j < (LMicros-RMicros)/2; j++) {
+    for (int j = 0; j < (LMicros-RMicros)/2.5; j++) {
       // Want to perform a CW turn
       SetDirCW();
       // Microstep the left wheel
@@ -507,15 +645,18 @@ void Fwd_LWall(int Steps) {
       Step();
     }
   }
+  delay(50);
   // Distance loss correction
   // Use recursive calling to drive the error to zero while checking angular heading and linear position
   if (LMicros + RMicros > 100) {
-    Steps = (LMicros + RMicros)*0.5;
+    //Serial.println("Largest correction");
+    Steps = (LMicros + RMicros)*0.4;
     delay(50);
     //Serial.print("Linear correction steps: ");
     //Serial.println(Steps);
     Fwd_LWall(Steps);
   } else if (LMicros + RMicros > 50) {
+    //Serial.println("Medium correction");
     // An empirically determined fraction of the microsteps taken
     Steps = (LMicros + RMicros)*0.8;
     // Debug
@@ -524,6 +665,7 @@ void Fwd_LWall(int Steps) {
     //Serial.println(Steps);
     Fwd_LWall(Steps);
   } else if (LMicros + RMicros > 30) {
+    //Serial.println("Small correction");
     // An empirically determined fraction of the microsteps taken
     Steps = (LMicros + RMicros)*0.9;
     // Debug
@@ -531,13 +673,15 @@ void Fwd_LWall(int Steps) {
     //Serial.print("Linear correction steps: ");
     //Serial.println(Steps);
     Fwd_LWall(Steps);
-  } else if (LMicros + RMicros > 10) {
+  } else if (LMicros + RMicros > 10 && RecursionLimit == false) {
+    //Serial.println("Smallest correction");
     // An empirically determined fraction of the microsteps taken
     Steps = (LMicros + RMicros)*1;
     // Debug
     delay(50);
     //Serial.print("Linear correction steps: ");
     //Serial.println(Steps);
+    RecursionLimit = 1;
     Fwd_LWall(Steps);
   }
 }
@@ -553,6 +697,11 @@ void Fwd_RWall(int Steps) {
     GetVoltageRT();
     // Convert voltages to distances
     VoltageToDistRT();
+    /*Serial.print(distL);
+    Serial.print(", ");
+    Serial.print(distR);
+    Serial.print(", ");
+    Serial.println(diff);*/
     // With only a left wall we rely on the distance from the wall for centering
     // A positive distance indicates being too far from the right wall
     // A negative distance indicates being too close to the right wall
@@ -598,7 +747,7 @@ void Fwd_RWall(int Steps) {
   // Try to correct direction if not parallel to cell
   if (RMicros > LMicros) {
     // Microstepped the right wheel more, so we may be turned right
-    for (int j = 0; j < (RMicros-LMicros)/2; j++) {
+    for (int j = 0; j < (RMicros-LMicros)/2.5; j++) {
       // Want to perform a CCW turn
       SetDirCCW();
       // Microstep the left wheel
@@ -611,7 +760,7 @@ void Fwd_RWall(int Steps) {
     }
   } else if (RMicros < LMicros) {
     // Microstepped the left wheel more, so we may be turned left
-    for (int j = 0; j < (LMicros-RMicros)/2; j++) {
+    for (int j = 0; j < (LMicros-RMicros)/2.5; j++) {
       // Want to perform a CW turn
       SetDirCW();
       // Microstep the left wheel
@@ -623,15 +772,18 @@ void Fwd_RWall(int Steps) {
       Step();
     }
   }
+  delay(50);
   // Distance loss correction
   // Use recursive calling to drive the error to zero while checking angular heading and linear position
   if  (LMicros + RMicros > 100) {
-    Steps = (LMicros + RMicros)*0.5;
+    //Serial.println("Largest correction");
+    Steps = (LMicros + RMicros)*0.4;
     delay(50);
     //Serial.print("Linear correction steps: ");
     //Serial.println(Steps);
     Fwd_RWall(Steps);
   } else if (LMicros + RMicros > 50) {
+    //Serial.println("Medium correction");
     // An empirically determined fraction of the microsteps taken
     Steps = (LMicros + RMicros)*0.8;
     // Debug
@@ -640,6 +792,7 @@ void Fwd_RWall(int Steps) {
     //Serial.println(Steps);
     Fwd_RWall(Steps);
   } else if (LMicros + RMicros > 30) {
+    //Serial.println("Small correction");
     // An empirically determined fraction of the microsteps taken
     Steps = (LMicros + RMicros)*0.9;
     // Debug
@@ -647,13 +800,15 @@ void Fwd_RWall(int Steps) {
     //Serial.print("Linear correction steps: ");
     //Serial.println(Steps);
     Fwd_RWall(Steps);
-  } else if (LMicros + RMicros > 10) {
+  } else if (LMicros + RMicros > 10 && RecursionLimit == false) {
+    //Serial.println("Smallest correction");
     // An empirically determined fraction of the microsteps taken
     Steps = (LMicros + RMicros)*1;
     // Debug
     delay(50);
     //Serial.print("Linear correction steps: ");
     //Serial.println(Steps);
+    RecursionLimit = 1;
     Fwd_RWall(Steps);
   }
 }
@@ -692,16 +847,19 @@ void Fwd_Unknown() {
     // Walls on both sides
     // Move forward with 2 points of guidance
     Serial.println("2 Walls available");
+    RecursionLimit = 0;
     Fwd_2Walls(StepsRemaining);
   } else if (WallArray[0] == 1 && WallArray[2] == 0) {
     // Wall on left side only
     // Move forward with left point of guidance
     Serial.println("Left wall only");
+    RecursionLimit = 0;
     Fwd_LWall(StepsRemaining);
   } else if (WallArray[0] == 0 && WallArray[2] == 1) {
     // Wall on right side only
     // Move forward with right point of guidance
     Serial.println("Right wall only");
+    RecursionLimit = 0;
     Fwd_RWall(StepsRemaining);
   } else {
     // No walls available
@@ -798,9 +956,9 @@ void Recenter() {
     // Using forward sensor again
     GetVoltageFWD();
     VoltageToDistFWD();
-    if (distC > FWD_PADDING-0.5) {
+    if (distC > FWD_PADDING-0.4) {
       // Too far from the wall
-      while (distC > FWD_PADDING-0.5) {
+      while (distC > FWD_PADDING-0.4) {
         GetVoltageFWD();
         VoltageToDistFWD();
         SetDirFWD();
@@ -810,9 +968,9 @@ void Recenter() {
         digitalWrite(MS2R, HIGH);
         Step();
       }
-    } else if (distC < FWD_PADDING-0.5) {
+    } else if (distC < FWD_PADDING-0.4) {
       // Too close to the wall
-      while (distC < FWD_PADDING-0.5) {
+      while (distC < FWD_PADDING-0.4) {
         GetVoltageFWD();
         VoltageToDistFWD();
         SetDirBWD();
@@ -890,9 +1048,9 @@ void Recenter() {
     // Using forward sensor again
     GetVoltageFWD();
     VoltageToDistFWD();
-    if (distC > FWD_PADDING-0.5) {
+    if (distC > FWD_PADDING-0.4) {
       // Too far from the wall
-      while (distC > FWD_PADDING-0.5) {
+      while (distC > FWD_PADDING-0.4) {
         GetVoltageFWD();
         VoltageToDistFWD();
         SetDirFWD();
@@ -902,9 +1060,9 @@ void Recenter() {
         digitalWrite(MS2R, HIGH);
         Step();
       }
-    } else if (distC < FWD_PADDING-0.5) {
+    } else if (distC < FWD_PADDING-0.4) {
       // Too close to the wall
-      while (distC < FWD_PADDING-0.5) {
+      while (distC < FWD_PADDING-0.4) {
         GetVoltageFWD();
         VoltageToDistFWD();
         SetDirBWD();
@@ -1001,4 +1159,5 @@ void Recenter() {
       }
     }
   }*/
+  // This seems to increase problems in the randomized behavior of the mouse, which wont need to be solved in a real run anyway
 }
